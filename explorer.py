@@ -2,9 +2,13 @@
 #© 2020 Andrew Spangler
 desc = """
 explorer.py
-A simple file explorer and file/folder picker written in tkinter/python.
+A simple file explorer and file/folder picker widget written in tkinter/python.
+"""
+module_usage = """
 The explorer, file, and folder pickers are accessed through three objects;
 explorer, file_dialog, and folder_dialog respectively.
+
+The explorer offers nothing more than simple browsing, no input can be obtained. 
 
 Input from file_dialog and folder_dialog windows is obtained like this:
 	```
@@ -280,10 +284,6 @@ class ScrollWrapper(object):
 			self.configure(yscrollcommand=self._ScrollWrapper(v_scrollbar))
 			v_scrollbar.grid(column=1, row=0, sticky="ns")
 		except: pass
-	
-		# h_scrollbar = tk.Scrollbar(container, orient="horizontal", command=self.xview)
-		# self.configure(xscrollcommand=self._ScrollWrapper(h_scrollbar))
-		# h_scrollbar.grid(column=0, row=1, sticky="ew")
 
 		container.grid_columnconfigure(0, weight=1)
 		container.grid_rowconfigure(0, weight=1)
@@ -373,7 +373,6 @@ def _get_human_mtime(path):
 	return str(datetime.fromtimestamp(os.path.getmtime(path)))[:19]
 
 if __name__ == "__main__":
-	print(desc)
 	parser = argparse.ArgumentParser(description=desc)
 	exclusive = parser.add_mutually_exclusive_group(required=True)
 	exclusive.add_argument("-f", "--file", help = "Choose a file", action="store_true")
