@@ -1,5 +1,8 @@
-#explorer.py
-#© 2020 Andrew Spangler
+#!/usr/bin/env python3
+#
+# explorer_tk
+# Copyright (C) 2020 Andrew Spangler
+#
 desc = """
 explorer.py
 A simple file explorer and file/folder picker widget written in tkinter/python.
@@ -31,9 +34,10 @@ folder_image_bytes = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x10\x00\x
 ##TODO:
 # - Bar to display allowed file types
 # - Icons for different file types
+# - Bind enter to submit text response
 
-#Fake DirEntry object to emulate os.DirEntry
 class DirEntry:
+	"""Fake DirEntry object to emulate os.DirEntry"""
 	def __init__(self, path):
 		self.path = path
 		self.name = os.path.basename(path)
@@ -49,30 +53,59 @@ class DirEntry:
 		return os.stat(self.path)
 
 """
-Base explorer window class, just allows the user to navigate directories
+Base explorer window class, allows the user to navigate directories
 """
 class explorer(tk.Toplevel):
 	def __init__(self, *args, **kwargs):
 		tk.Toplevel.__init__(self, *args, **kwargs)
 		self.geometry(f"{WIDTH}x{HEIGHT}")
 		self.title("Explorer")
+
+		"""
+		Map to connect the string id's of the various nodes with layout:
+		{
+			{"entry" : DirEntry, "built" : False},
+			{"entry" : DirEntry, "built" : False},
+			...
+		}
+		"built" indicates whether or not the node has been populated
+		assuming it has children nodes.
+
+		DirEntry is an object produced by the itterable os.scandir()
+		It has several methods  it similar to those in the module os.path
+		such as is_file, is_dir, and stat, and the object caches these
+		values for later calls, resulting in better performance.
+
+		The root node is mapped to "" and uses an artifical DirEntry.
+		The rest are mapped to their string id's provided at the time of the node's creation.
+		"""
+		self.node_map = {}
+
 		self.style = Style(self)
+		#Style treeview, not styling means 
+		#later calls to tag_configure() don't work
 		self.style.map("Treeview", foreground=[("disabled", "white")], background=[("disabled", "black")])
 
+		#If a path was passed set the current dir to it
+		#Otherwise set it to the user's home dir
 		if "path" in args: self.current_dir = kwargs.pop("path")
 		else: self.current_dir = os.path.expanduser("~")
+
 		self.set_title(self.current_dir)
 		self.file_icon = load_tk_image_from_bytes_array(file_image_bytes)
 		self.folder_icon = load_tk_image_from_bytes_array(folder_image_bytes)
-		self.node_map = {}
+
 		self.outer_frame = LabelFrame(self)
 		self.outer_frame.pack(fill = "both", expand = 1, padx = 5, pady = 5)
+
+		#Top row, frame to add a path to enter a path and button to go to it
 		self.path_frame = Frame(self.outer_frame)
 		self.path_frame.pack(side = "top", expand = 0, fill = "x")
 		self.path_box = Entry(self.path_frame)
 		self.path_box.pack(side = "left", expand = 1, fill = "both", padx = 5, pady = (1,5))
-		self.go_button = Button(self.path_frame, text = "⏎", command = self.on_enter_path_button)
-		self.go_button.pack(side = "right", expand = 0, fill = "both", padx = (0,4) , pady = (0,4))
+		self.submit_path_button = Button(self.path_frame, text = "⏎", command = self.submit_path)
+		self.submit_path_button.pack(side = "right", expand = 0, fill = "both", padx = (0,4) , pady = (0,4)) #Buttons have weird padding
+
 		self.tree = ScrolledTree(self.outer_frame, columns = ("size", "modified"))
 		self.tree.pack(side = "top", expand = 1, fill = "both", padx = 5, pady = (0,5))
 		self.tree.bind("<Double-1>", self.on_double_click)
@@ -83,65 +116,79 @@ class explorer(tk.Toplevel):
 		self.tree.heading("#0", text = "...", anchor = "w")
 		self.tree.heading("size", text = "Size", anchor = "w")
 		self.tree.heading("modified", text = "Modified", anchor = "w")
+
 		self.populate(self.current_dir)
 
 	def set_title(self, string):
 		self.title(f"TK Explorer - {string}")
 
-	def on_enter_path_button(self):
+	def submit_path(self):
 		self.populate(self.tree.selection()[0])
 
 	def on_open(self, event):
+		#Get current node and attempt to build it
+		#build_node will immediately return if already built
 		self.build_node(self.tree.focus())
 
 	def populate(self, dir: os.path):
 		self.current_dir = dir
-		self.node_map = {}
+		self.node_map = {} #Clear node map
 		self.tree.delete(*self.tree.get_children())
 		self.set_title(self.current_dir)
 		self.build_tree()
-		self.outer_frame.configure(text = self.current_dir)
+		self.outer_frame.configure(text = self.current_dir) #Set frame label text
 
 	def build_tree(self):
-		self.node_map[""] = {"path" : DirEntry(self.current_dir), "built" : False}
-		self.build_node("")
+		"""fills the tree with the contents of the path at self.current_dir"""
+		#Create entry in the node map for the tree root
+		self.node_map[""] = {"entry" : DirEntry(self.current_dir), "built" : False}
+		self.build_node("") #Build tree root
 
 	def build_node(self, node: id):
+		""""""
 		node_dict = self.node_map[node]
-		if node_dict["built"] or node_dict["path"].is_file():
-			return
-		path = node_dict["path"]
+		if node_dict["built"]: return
 
+		path = node_dict["entry"]
 		self.tree.delete(*self.tree.get_children(node))
-
 		try: dir_items = os.scandir(path.path)
 		except PermissionError: dir_items = []
 
 		files, folders_then_both = [], []
-		for entry in dir_items:
+		for entry in dir_items: #Sort files from folders
 			files.append(entry) if entry.is_file() else folders_then_both.append(entry)
-		folders_then_both.extend(files)
+		folders_then_both.extend(files) #Sort folders-first
 		for entry in folders_then_both:
 			if entry.is_file():
-				size = _sizeof_fmt(os.path.getsize(entry.path))
-				modified = _get_human_mtime(entry.path)
+				size = _sizeof_fmt(os.path.getsize(entry.path)) #Get friendly file size
+				modified = _get_human_mtime(entry.path) #Get human modified time
 			else:
 				size = ""
 				modified = ""
 
 			branch = self.tree.insert(node, "end", text = entry.name, values = (size, modified, ""))
-			self.build_branch(branch, entry)
-			self.node_map[branch] = {"path" : entry, "built" : False}
+			self.build_branch(branch, entry) #Flesh out the branch
+			#Built status is set to false if it's a dir since it may have children
+			self.node_map[branch] = {"entry" : entry, "built" : entry.is_file()}
 
 		self.node_map[node]["built"] = True
 
 	def build_branch(self, branch: id, entry: DirEntry):
+		#Flesh out an empty branch
+		#Adds an image to the branch based on its type (file or folder)
+		#Also adds a + to the node if it has children
 		if entry.is_dir():
-			self.tree.item(branch, image = self.folder_icon)
 			try:
-				if os.listdir(entry.path):
+				self.tree.item(branch, image = self.folder_icon)
+				if os.scandir(entry.path):
+					#Insert a single empty node in the branch, 
+					#if it has children, don't bother populating.
+					#This is so the branch has a clickable +, 
+					#when the + is clicked build_node(branch) is called
+					#The empty node gets erased when build_node gets called
 					self.tree.insert(branch, "end", text = ".", values = ("", "", ""))
 			except PermissionError: #make folder appear empty if no permission to access it
+				print(entry.path)
 				pass
 		else:
 			self.tree.item(branch, image = self.file_icon)
@@ -153,8 +200,8 @@ class explorer(tk.Toplevel):
 			self.populate(os.path.dirname(self.current_dir))
 		else:
 			node_dict = self.node_map[self.tree.selection()[0]]
-			if node_dict["path"].is_dir():
-				self.populate(node_dict["path"].path)
+			if node_dict["entry"].is_dir():
+				self.populate(node_dict["entry"].path)
 
 """
 Dialog class, configures the background color of nodes with valid/invalid tags.
@@ -169,13 +216,13 @@ class _dialog(explorer):
 		self.title("base dialog")
 		self.lift() #Bring window to top
 		self.focus_force() #Force focus on window
-		self.grab_set() #Grab
-		self.tree.tag_configure("invalid", foreground="dimgray")
-		self.tree.tag_configure("valid", foreground="black")
-		self.awaiting_selection = False
-		self.canceled = False
-		self.selection_made = False
-		self.selection = None
+		self.grab_set() #Prevent other windows from being accessed
+		self.tree.tag_configure("invalid", foreground="dimgray") #configure invalid items for selection in the tree
+		self.tree.tag_configure("valid", foreground="black") #configure valid items for selection in the tree
+		self.awaiting_selection = False #See get_input
+		self.canceled = False #See get_input
+		self.selection_made = False #See get_input
+		self.selection = None #See get_input
 
 	def get_input(self, input_type = "file"):
 		"""
@@ -190,7 +237,12 @@ class _dialog(explorer):
 		function that call get_input.
 
 		How self.selection and self.selection_made is set
-		is different for each class built from _dialog  
+		is different for each class built from _dialog
+
+		Cancel is called whenever the window is closed to
+		allow any thread waiting for a selection to be made
+		to exit, as this normally prevens the script from
+		being killed even with a keyboard interrupt
 		"""
 		self.awaiting_selection = True
 		while not self.selection_made and not self.canceled: pass 
@@ -214,11 +266,12 @@ class file_dialog(_dialog):
 		_dialog.__init__(self, *args, **kwargs)
 		self.set_title(self.current_dir)
 
+	#Redefine set_title
 	def set_title(self, string):
 		es = " - [" + " , ".join(e for e in self.endings) + "]" if self.endings else ""
 		self.title(f"Please select a file - {string}{es}")
 
-	#Labels files with the 
+	#Labels entries based on if they are valid for selection
 	def build_branch(self, branch, entry):
 		if entry.is_file():
 			if self.endings:
@@ -230,19 +283,20 @@ class file_dialog(_dialog):
 		else: self.tree.item(branch, tags = ("invalid",))
 		super().build_branch(branch, entry)
 
+	#If the file double-clicked is valid select it
 	def on_double_click(self, event):
 		if self.awaiting_selection:
 			region = self.tree.identify("region", event.x, event.y)
 			if not region == "heading":
 				node_dict = self.node_map[self.tree.selection()[0]]
-				if node_dict["path"].is_file():
+				if node_dict["entry"].is_file():
 					if self.endings:
 						for end in self.endings:
-							if node_dict["path"].path.endswith(end):
-								self.selection = node_dict["path"].path
+							if node_dict["entry"].path.endswith(end):
+								self.selection = node_dict["entry"].path
 								self.selection_made = True
 					else:
-						self.selection = node_dict["path"].path
+						self.selection = node_dict["entry"].path
 						self.selection_made = True
 		super().on_double_click(event)
 
@@ -254,6 +308,7 @@ class folder_dialog(_dialog):
 		_dialog.__init__(self, *args, **kwargs)
 		self.title("Please select a folder")
 
+	#Redefine set_title
 	def set_title(self, string):
 		self.title(f"Please select a folder - {string}")
 
@@ -267,8 +322,8 @@ class folder_dialog(_dialog):
 			region = self.tree.identify("region", event.x, event.y)
 			if not region == "heading":
 				node_dict = self.node_map[self.tree.selection()[0]]
-				if node_dict["path"].is_dir():
-					self.selection = node_dict["path"].path
+				if node_dict["entry"].is_dir():
+					self.selection = node_dict["entry"].path
 					self.selection_made = True
 		super().on_double_click(event)
 
@@ -295,7 +350,7 @@ class ScrollWrapper(object):
 
 	@staticmethod
 	def _ScrollWrapper(sbar):
-		#Hide and show scrollbar automatically
+		#Hide and show scrollbar automatically"""
 		def wrap(begining, end):
 			begining, end = float(begining), float(end)
 			if begining <= 0 and end >= 1: sbar.grid_remove()
@@ -307,7 +362,7 @@ class ScrollWrapper(object):
 		return str(self.master)
 
 def _create_frame(func):
-	#Wraps widget and bars in frame and adds bindings
+	"""Wraps widget and bars in frame and adds bindings"""
 	def wrapped(cls, master, **kw):
 		f = tk.Frame(master)
 		f.bind("<Enter>", lambda e: _bind_mousewheel(e, f))
@@ -381,6 +436,7 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 
 	class Threader:
+		"""Simple threader to prevent get_input causing blocking"""
 		def __init__(self, max_worker_threads: int = 3):
 			self.threads = []
 			
@@ -389,12 +445,14 @@ if __name__ == "__main__":
 			t = threading.Thread(target=callback, args=arglist)
 			t.start()
 			self.threads.append(t)
+			return t
 
 		def join(self):
 			for t in threads:
 				t.join()
 	threader = Threader()
 
+	#Simple gui to test the folder and file picker
 	class test_gui(tk.Tk):
 		def __init__(self, args, picker_type):
 			tk.Tk.__init__(self)
@@ -409,13 +467,12 @@ if __name__ == "__main__":
 				text = "Pick a file!"
 			elif args.dir:
 				text = "Pick a folder!"
-			else:
+			else: #Not used
 				text = "Pick something!"
-
 			Button(f, text = text, command = lambda: threader.add_thread(self.get_input)).pack(expand = 0, side = "bottom")
 
 		def get_input(self):
-			dialog = self.picker_type(self)
+			dialog = self.picker_type(self) #Make the dialog window
 			self.l.configure(text = dialog.get_input())
 
 	if args.file:
