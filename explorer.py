@@ -139,7 +139,7 @@ class explorer(tk.Toplevel):
 		self.outer_frame.configure(text = self.current_dir) #Set frame label text
 
 	def build_tree(self):
-		"""fills the tree with the contents of the path at self.current_dir"""
+		"""Fills the tree with the contents of the path at self.current_dir"""
 		#Create entry in the node map for the tree root
 		self.node_map[""] = {"entry" : DirEntry(self.current_dir), "built" : False}
 		self.build_node("") #Build tree root
@@ -181,11 +181,10 @@ class explorer(tk.Toplevel):
 			try:
 				self.tree.item(branch, image = self.folder_icon)
 				if os.scandir(entry.path):
-					#Insert a single empty node in the branch, 
-					#if it has children, don't bother populating.
+					#Insert a single empty node in the branch.
 					#This is so the branch has a clickable +, 
-					#when the + is clicked build_node(branch) is called
-					#The empty node gets erased when build_node gets called
+					#when the + is clicked build_node(branch) is called.
+					#The empty node gets erased when build_node gets called.
 					self.tree.insert(branch, "end", text = ".", values = ("", "", ""))
 			except PermissionError: #make folder appear empty if no permission to access it
 				print(entry.path)
@@ -241,7 +240,7 @@ class _dialog(explorer):
 
 		Cancel is called whenever the window is closed to
 		allow any thread waiting for a selection to be made
-		to exit, as this normally prevens the script from
+		to exit, as this normally prevents the script from
 		being killed even with a keyboard interrupt
 		"""
 		self.awaiting_selection = True
@@ -268,11 +267,12 @@ class file_dialog(_dialog):
 
 	#Redefine set_title
 	def set_title(self, string):
-		es = " - [" + " , ".join(e for e in self.endings) + "]" if self.endings else ""
-		self.title(f"Please select a file - {string}{es}")
+		"""Adds a list of valid file endings to the window title"""
+		end = " - [" + " , ".join(e for e in self.endings) + "]" if self.endings else ""
+		self.title(f"Please select a file - {string}{end}")
 
-	#Labels entries based on if they are valid for selection
 	def build_branch(self, branch, entry):
+		"""Labels entries based on if they are valid for selection"""
 		if entry.is_file():
 			if self.endings:
 				for ending in self.endings:
@@ -283,7 +283,10 @@ class file_dialog(_dialog):
 		else: self.tree.item(branch, tags = ("invalid",))
 		super().build_branch(branch, entry)
 
-	#If the file double-clicked is valid select it
+	"""Add selection code for the underlying _explorer class
+	   If the item double-clicked is valid set selection to
+	   the entry's path and set the selection_made flag so
+	   the waiting thread knows to access the selection"""
 	def on_double_click(self, event):
 		if self.awaiting_selection:
 			region = self.tree.identify("region", event.x, event.y)
@@ -350,7 +353,7 @@ class ScrollWrapper(object):
 
 	@staticmethod
 	def _ScrollWrapper(sbar):
-		#Hide and show scrollbar automatically"""
+		"""Hide and show scrollbar automatically"""
 		def wrap(begining, end):
 			begining, end = float(begining), float(end)
 			if begining <= 0 and end >= 1: sbar.grid_remove()
@@ -428,6 +431,8 @@ def _get_human_mtime(path):
 	return str(datetime.fromtimestamp(os.path.getmtime(path)))[:19]
 
 if __name__ == "__main__":
+	#The script / args are really just for demonstation / testing purposes
+	#The primary use of this is as a module to modify / expand on for future projects
 	parser = argparse.ArgumentParser(description=desc)
 	exclusive = parser.add_mutually_exclusive_group(required=True)
 	exclusive.add_argument("-f", "--file", help = "Choose a file", action="store_true")
@@ -469,11 +474,15 @@ if __name__ == "__main__":
 				text = "Pick a folder!"
 			else: #Not used
 				text = "Pick something!"
-			Button(f, text = text, command = lambda: threader.add_thread(self.get_input)).pack(expand = 0, side = "bottom")
+			
+			Button(f, text = text, 
+				command = lambda: threader.add_thread(self.get_input) #Lambda function to 
+				).pack(expand = 0, side = "bottom")
 
 		def get_input(self):
 			dialog = self.picker_type(self) #Make the dialog window
-			self.l.configure(text = dialog.get_input())
+			selection = dialog.get_input() #
+			self.l.configure(text = selection)
 
 	if args.file:
 		w = test_gui(args, file_dialog)
